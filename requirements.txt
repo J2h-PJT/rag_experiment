@@ -1,0 +1,14 @@
+sqlalchemy
+psycopg2-binary
+pdfminer.six
+pdfplumber
+scikit-learn
+langchain-text-splitters
+tiktoken
+numpy
+rank-bm25
+sentence-transformers
+streamlit
+pandas
+requests
+reportlab

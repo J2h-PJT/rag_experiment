@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual Env
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Vector DB
+vector_db/
+
+# log
+logs/
+*.log
+*.csv
+
+# Sample-Doc
+_docs/
+docs/
+*.pdf
+
+# Session Message
+sessions/
+session.log/
+session_*.txt
+
+# HuggingFace cache
+core/hf_cache_1536/
+core/hf_cache_384/
+hf_cache_1536/
+hf_cache_384/
+*.safetensors
+
+#Streamlit Session State
+*.tmp.*
+*.tmp

@@ -96,6 +96,7 @@ class DatabaseManager:
                     llm_model VARCHAR(100),
                     temperature FLOAT,
                     top_p FLOAT,
+                    fusion_weight FLOAT DEFAULT 1.0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
             """)
@@ -181,6 +182,7 @@ class DatabaseManager:
             cur.execute("ALTER TABLE gold_qrels ADD COLUMN IF NOT EXISTS operator_score INT NOT NULL DEFAULT 0;")
             # 구 스키마 정리: relevance_score 컬럼 제거
             cur.execute("ALTER TABLE gold_qrels DROP COLUMN IF EXISTS relevance_score;")
+            cur.execute("ALTER TABLE experiment_configs ADD COLUMN IF NOT EXISTS fusion_weight FLOAT DEFAULT 1.0;")
 
             # ----------------- 4.4. 실제 실행 단위 (Runs) -----------------
             cur.execute("""

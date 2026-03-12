@@ -387,15 +387,16 @@ class PostgresExperimentRepository(IExperimentRepository):
             cur.execute("""
                 INSERT INTO experiment_configs (
                     config_id, experiment_id, retriever_type, embedding_model,
-                    chunk_size, overlap, reranker_type, llm_model, temperature, top_p, created_at
+                    chunk_size, overlap, reranker_type, llm_model, temperature, top_p,
+                    fusion_weight, created_at
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (config_id) DO NOTHING;
             """, (
                 config.config_id, config.experiment_id, config.retriever_type,
                 config.embedding_model, config.chunk_size, config.overlap,
                 config.reranker_type, config.llm_model, config.temperature,
-                config.top_p, config.created_at
+                config.top_p, config.fusion_weight, config.created_at
             ))
         return True
 
@@ -416,6 +417,7 @@ class PostgresExperimentRepository(IExperimentRepository):
                     chunk_size=row['chunk_size'] or 500, overlap=row['overlap'] or 50,
                     reranker_type=row['reranker_type'], llm_model=row['llm_model'] or 'llama3.1:8b',
                     temperature=row['temperature'] or 0.0, top_p=row['top_p'] or 1.0,
+                    fusion_weight=row['fusion_weight'] if row['fusion_weight'] is not None else 1.0,
                     created_at=row['created_at']
                 )
         return None
@@ -497,7 +499,7 @@ class PostgresRunRepository:
     def list_runs(self, experiment_id: str) -> List[dict]:
         with self.db.transaction() as cur:
             cur.execute("""
-                SELECT er.*, ec.retriever_type, ec.embedding_model
+                SELECT er.*, ec.retriever_type, ec.embedding_model, ec.reranker_type, ec.llm_model, ec.fusion_weight
                 FROM experiment_runs er
                 JOIN experiment_configs ec ON er.config_id = ec.config_id
                 WHERE ec.experiment_id = %s

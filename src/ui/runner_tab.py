@@ -113,8 +113,20 @@ def render_runner_tab():
             )
             if reranker_model == "cross-encoder/ms-marco-MiniLM-L-6-v2":
                 st.warning("⚠️ 이 모델은 영어 전용입니다. 한국어 문서에 적용 시 메트릭이 0에 가까워질 수 있습니다.")
+            fusion_weight = st.slider(
+                "Reranker Fusion Weight (α)",
+                min_value=0.0, max_value=1.0, value=1.0, step=0.1,
+                help="1.0=순수 Reranker / 0.5=Retrieval+Reranker 혼합 / 0.0=Reranker 미적용"
+            )
+            st.caption(
+                {1.0: "🔴 순수 Reranker", 0.0: "🟢 Retrieval 점수 유지"}.get(
+                    fusion_weight,
+                    f"🟡 Retrieval {(1-fusion_weight):.0%} + Reranker {fusion_weight:.0%} 혼합"
+                )
+            )
         else:
             reranker_model = "BAAI/bge-reranker-v2-m3"
+            fusion_weight = 1.0
         generate_answers = st.checkbox("🤖 LLM 답변 생성 포함 (Ollama)", value=False)
 
     # Hybrid 선택 시 가중치 슬라이더
@@ -137,6 +149,7 @@ def render_runner_tab():
             embedding_model=exp_model,
             reranker_type=reranker_model if use_reranker else None,
             llm_model="llama3.1:8b",
+            fusion_weight=fusion_weight if use_reranker else 1.0,
         )
         registry.experiment_repo.save_config(config)
 
@@ -160,6 +173,7 @@ def render_runner_tab():
                 run_name=run_name,
                 top_k=top_k,
                 use_reranker=use_reranker,
+                fusion_weight=fusion_weight if use_reranker else 1.0,
                 generate_answers=generate_answers,
                 progress_callback=progress_callback,
             )
@@ -179,6 +193,7 @@ def render_runner_tab():
         st.session_state["last_bm25_weight"]    = bm25_weight
         st.session_state["last_use_reranker"]   = use_reranker
         st.session_state["last_reranker_model"] = reranker_model if use_reranker else "미적용"
+        st.session_state["last_fusion_weight"]  = fusion_weight if use_reranker else 1.0
         st.session_state["last_exp_name"]       = selected_exp_name
         st.session_state["last_ds_label"]       = selected_ds_label
         st.session_state["last_exp_model"]      = exp_model
@@ -208,7 +223,9 @@ def render_runner_tab():
 
         # ── 결과 요약 (복사용) ───────────────────────────────
         import datetime as _dt
-        reranker_label = _reranker_model
+        _fusion_weight = st.session_state.get("last_fusion_weight", 1.0)
+        reranker_label = (f"{_reranker_model} (α={_fusion_weight:.1f})"
+                          if _reranker_model != "미적용" else "미적용")
         weight_label   = (f"Vector {_vector_weight} / BM25 {_bm25_weight}"
                           if _retriever_type == "hybrid" else "-")
         pq_lines = "\n".join(

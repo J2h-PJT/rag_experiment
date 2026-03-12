@@ -10,6 +10,7 @@ from src.ui.upload_tab import render_upload_tab
 from src.ui.qrels_tab import render_qrels_tab
 from src.ui.runner_tab import render_runner_tab
 from src.ui.dashboard_tab import render_dashboard_tab
+from src.ui.chat_tab import render_chat_tab
 
 def main():
     st.set_page_config(
@@ -28,7 +29,7 @@ def main():
     
     app_mode = st.sidebar.radio(
         "기능 선택",
-        ["Document Upload", "Gold Qrels Builder", "Experiment Runner", "Metrics Dashboard"]
+        ["Document Upload", "Gold Qrels Builder", "Experiment Runner", "Metrics Dashboard", "RAG Chat"]
     )
 
     st.sidebar.divider()
@@ -46,6 +47,8 @@ def main():
         render_runner_tab()
     elif app_mode == "Metrics Dashboard":
         render_dashboard_tab()
+    elif app_mode == "RAG Chat":
+        render_chat_tab()
 
 if __name__ == "__main__":
     main()

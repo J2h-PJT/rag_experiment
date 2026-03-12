@@ -36,6 +36,7 @@ class ExperimentConfig:
     llm_model: str = "gpt-4-turbo"
     temperature: float = 0.0
     top_p: float = 1.0
+    fusion_weight: float = 1.0
     created_at: datetime = field(default_factory=datetime.utcnow)
 
 @dataclass

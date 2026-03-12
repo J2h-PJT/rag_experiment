@@ -44,6 +44,7 @@ class ExperimentRunner:
         run_name: str,
         top_k: int = 10,
         use_reranker: bool = False,
+        fusion_weight: float = 1.0,
         generate_answers: bool = False,
         progress_callback=None,
     ) -> Tuple[str, Dict[str, float], List[Dict]]:
@@ -91,7 +92,9 @@ class ExperimentRunner:
             deduped     = self._filter.filter_candidates(raw_results)  # 텍스트 중복 제거
 
             if use_reranker and self.reranker:
-                results = self.reranker.rerank(question.query_text, deduped, top_k=top_k)
+                results = self.reranker.rerank(
+                    question.query_text, deduped, top_k=top_k, fusion_weight=fusion_weight
+                )
             else:
                 results = deduped[:top_k]
 

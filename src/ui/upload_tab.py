@@ -64,9 +64,10 @@ def render_upload_tab():
         st.subheader("⚙️ 전처리 설정")
         c1, c2 = st.columns(2)
         with c1:
-            chunk_size = st.number_input("Chunk Size", min_value=100, max_value=2000, value=500, step=100)
+            chunk_size = st.number_input("Chunk Size (문자 수)", min_value=100, max_value=4000, value=700, step=100)
         with c2:
-            chunk_overlap = st.number_input("Chunk Overlap", min_value=0, max_value=500, value=50, step=10)
+            chunk_overlap = st.number_input("Chunk Overlap (문자 수)", min_value=0, max_value=500, value=120, step=10)
+        st.caption("권장: Chunk Size 700 / Overlap 120 (한국어 문서 기준)")
 
         st.subheader("🧠 Embedding Model")
         model_keys = list(AVAILABLE_EMBEDDING_MODELS.keys())

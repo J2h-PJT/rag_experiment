@@ -53,12 +53,16 @@ def render_qrels_tab():
             )
             new_model = model_keys[new_model_idx]
             if st.form_submit_button("실험 생성"):
-                experiment_id = str(uuid.uuid4())
-                registry.experiment_repo.create_experiment(
-                    experiment_id, tenant_id, new_name, new_desc, embedding_model=new_model
-                )
-                st.success(f"실험 '{new_name}' ({new_model}) 생성 완료!")
-                st.rerun()
+                if not new_name.strip():
+                    st.error("실험 이름을 입력해주세요.")
+                else:
+                    experiment_id = str(uuid.uuid4())
+                    registry.experiment_repo.create_experiment(
+                        experiment_id, tenant_id, new_name.strip(), new_desc, embedding_model=new_model
+                    )
+                    # ★ selectbox를 새 실험으로 전환한 뒤 rerun
+                    st.session_state["qrels_exp_sel"] = new_name.strip()
+                    st.rerun()
         st.warning("실험을 먼저 생성해주세요.")
         return
     else:
@@ -145,34 +149,83 @@ def render_qrels_tab():
                          query_text=query, created_at=datetime.datetime.now())
             )
 
-        with st.status("Pipeline 실행 중...", expanded=True) as status:
-            st.write(f"1. Hybrid Retrieval 실행 (Vector[{exp_model}] + BM25 RRF)...")
-            st.write("2. Candidate 필터링 (중복/노이즈 제거)...")
-            st.write("3. Cross-Encoder Reranking...")
-            st.write("4. LLM Relevance Suggestion 생성...")
+        fetch_k = num_candidates * 3
 
-            engine = registry.create_engine_for_model(exp_model, reranker_model=reranker_model)
-            candidates = engine.generate_candidates(
-                tenant_id=tenant_id,
-                query=query,
-                top_k=num_candidates
-            )
-            st.session_state['qrels_candidates']    = candidates
-            st.session_state['current_query']       = query
-            st.session_state['current_q_id']        = question_id
-            st.session_state['current_exp_id']      = experiment_id
-            # 생성 당시 설정값 저장 (저장 시 일관성 보장)
+        with st.status("⏳ Pipeline 실행 중...", expanded=True) as status:
+
+            # ── Step 1: Hybrid Retrieval ──────────────────────────
+            s1 = st.empty()
+            s1.write(f"🔍 **[1/4] Hybrid Retrieval** 실행 중 (Vector[{exp_model}] + BM25 RRF, fetch_k={fetch_k})...")
+            try:
+                retriever = registry.create_retriever("hybrid", exp_model)
+                retrieved_candidates = retriever.retrieve_chunks(tenant_id, query, top_k=fetch_k)
+                s1.write(f"✅ **[1/4] Hybrid Retrieval** 완료 — {len(retrieved_candidates)}개 검색됨")
+            except Exception as e:
+                s1.write(f"❌ **[1/4] Retrieval 실패**: {e}")
+                status.update(label="오류 발생", state="error")
+                st.stop()
+
+            # ── Step 2: Candidate 필터링 ──────────────────────────
+            s2 = st.empty()
+            s2.write("🔧 **[2/4] Candidate 필터링** 중 (중복/노이즈 제거)...")
+            try:
+                filtered_candidates = registry.filter_chain.filter_candidates(retrieved_candidates)
+                s2.write(f"✅ **[2/4] 필터링** 완료 — {len(filtered_candidates)}개 남음 ({len(retrieved_candidates) - len(filtered_candidates)}개 제거)")
+            except Exception as e:
+                s2.write(f"❌ **[2/4] 필터링 실패**: {e}")
+                status.update(label="오류 발생", state="error")
+                st.stop()
+
+            # ── Step 3: Cross-Encoder Reranking ──────────────────
+            s3 = st.empty()
+            s3.write(f"🎯 **[3/4] Cross-Encoder Reranking** 중 (모델: {reranker_model.split('/')[-1]})...")
+            try:
+                reranker = registry.create_reranker(reranker_model)
+                reranked_candidates = reranker.rerank(query, filtered_candidates, top_k=num_candidates)
+                s3.write(f"✅ **[3/4] Reranking** 완료 — 상위 {len(reranked_candidates)}개 선정")
+            except Exception as e:
+                s3.write(f"❌ **[3/4] Reranking 실패**: {e}")
+                status.update(label="오류 발생", state="error")
+                st.stop()
+
+            # ── Step 4: LLM Relevance Suggestion ─────────────────
+            s4 = st.empty()
+            s4.write(f"🤖 **[4/4] LLM Relevance Suggestion** 생성 중 ({len(reranked_candidates)}개 청크 평가)...")
+            try:
+                chunks_to_suggest = [c for c, _ in reranked_candidates]
+                llm_scores_map = registry.suggester.suggest_scores(query, chunks_to_suggest)
+                s4.write(f"✅ **[4/4] LLM Suggestion** 완료")
+            except Exception as e:
+                s4.write(f"⚠️ **[4/4] LLM Suggestion 실패** (점수 0으로 처리): {e}")
+                llm_scores_map = {}
+
+            # ── 결과 어셈블 ───────────────────────────────────────
+            candidates = []
+            for chunk, rerank_score in reranked_candidates:
+                retriever_score = next(
+                    (s for c, s in retrieved_candidates if c.chunk_id == chunk.chunk_id), 0.0
+                )
+                candidates.append({
+                    "chunk": chunk,
+                    "retriever_score": retriever_score,
+                    "rerank_score": rerank_score,
+                    "llm_suggestion": llm_scores_map.get(chunk.chunk_id, 0),
+                })
+
+            st.session_state['qrels_candidates']     = candidates
+            st.session_state['current_query']        = query
+            st.session_state['current_q_id']         = question_id
+            st.session_state['current_exp_id']       = experiment_id
             st.session_state['qrels_num_candidates'] = num_candidates
             st.session_state['qrels_exp_model']      = exp_model
-            # LLM 점수 (읽기 전용)
             st.session_state['llm_scores'] = {
                 c['chunk'].chunk_id: c.get('llm_suggestion', 0)
                 for c in candidates
             }
-            # 운영자 점수: 위젯 키를 단일 진실 공급원으로 사용 (None = 미선택)
             for c in candidates:
                 st.session_state[f"op_score_{c['chunk'].chunk_id}"] = None
-            status.update(label=f"Candidate {len(candidates)}개 생성 완료!", state="complete", expanded=False)
+
+            status.update(label=f"✅ Candidate {len(candidates)}개 생성 완료!", state="complete", expanded=False)
 
     # ── 5. HITL 검증 UI ────────────────────────────────────
     if 'qrels_candidates' in st.session_state:
